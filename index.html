@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Simulation | Universitas Ma Chung</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        /* === SYSTEM VARIABLES & THEME === */
+        :root {
+            --primary: #6366f1;        
+            --primary-light: #818cf8;
+            --secondary: #0ea5e9;      
+            --bg-dark: #0f172a;        
+            --glass-bg: rgba(15, 23, 42, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --solid-header: #1e293b;
+            color-scheme: dark;
+        }
+
+        * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--primary) transparent; }
+        
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden; 
+            /* Background Ma Chung */
+            background-image: url('https://machung.ac.id/wp-content/themes/brew-master/images/images-ps/umc-new.jpg');
+            background-size: cover; background-position: center;
+            position: relative;
+        }
+        
+        /* Overlay Gelap (Lebih Tipis biar Background Kelihatan) */
+        body::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.65); /* Opacity dikurangi biar lebih terang */
+            z-index: -2; 
+            backdrop-filter: blur(1px); /* Blur dikurangi biar jelas */
+        }
+
+        /* === ANIMASI SALJU & SANTA === */
+        #snow-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; pointer-events: none;
+        }
+
+        .santa-claus {
+            position: fixed;
+            top: 15%; /* Posisi di langit */
+            left: -300px; /* Mulai dari luar layar kiri */
+            width: 200px;
+            z-index: -1;
+            opacity: 0.8;
+            animation: flySanta 25s linear infinite; /* Animasi terbang */
+            pointer-events: none;
+        }
+
+        @keyframes flySanta {
+            0% { left: -300px; transform: translateY(0) rotate(5deg); }
+            25% { transform: translateY(20px) rotate(0deg); }
+            50% { transform: translateY(0) rotate(-5deg); }
+            75% { transform: translateY(-20px) rotate(0deg); }
+            100% { left: 110%; transform: translateY(0) rotate(5deg); } /* Terbang sampai keluar kanan */
+        }
+
+        /* === HALAMAN LOGIN (DENGAN ANIMASI TRANSISI) === */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;
+            transition: opacity 0.8s ease, visibility 0.8s;
+        }
+        /* Fade Out Class untuk Login */
+        .fade-out { opacity: 0; pointer-events: none; visibility: hidden; }
+
+        .login-card {
+            position: relative; 
+            background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(25px);
+            padding: 45px 40px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 380px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.6);
+            /* Animasi Masuk (Zoom In) */
+            animation: zoomIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .machung-logo { max-width: 140px; margin-bottom: 20px; filter: drop-shadow(0 0 15px rgba(255,255,255,0.4)); }
+        .login-input { width: 100%; padding: 14px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--glass-border); border-radius: 12px; color: white; text-align: center; font-family: 'Outfit'; font-size: 14px; margin-bottom: 20px; transition: 0.3s; }
+        .login-input:focus { outline: none; border-color: var(--primary-light); background: rgba(0,0,0,0.6); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3); }
+        .btn-enter { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary), #4338ca); border: none; border-radius: 12px; color: white; font-weight: 700; cursor: pointer; transition: 0.3s; box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4); }
+        .btn-enter:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 15px 30px rgba(79, 70, 229, 0.6); }
+
+        /* === LAYOUT STRUCTURE === */
+        #app-container { 
+            display: none; flex-direction: column; height: 100%; z-index: 10; position: relative;
+            opacity: 0; /* Default invisible sebelum animasi masuk */
+        }
+        
+        /* Class animasi masuk dashboard */
+        .dashboard-enter {
+            display: flex !important;
+            animation: slideUpFade 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .navbar {
+            height: 70px; flex-shrink: 0;
+            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 25px;
+        }
+        .nav-logo { font-weight: 800; font-size: 18px; color: white; display: flex; align-items: center; gap: 10px; }
+        .nav-user { display: flex; align-items: center; gap: 15px; }
+        .avatar { width: 35px; height: 35px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; color: white; }
+
+        .content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+        .sidebar { 
+            width: 320px; min-width: 320px; 
+            background: rgba(15, 23, 42, 0.7); 
+            border-right: 1px solid var(--glass-border); 
+            overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        .main-content { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+
+        /* COMPONENTS */
+        .section-header { font-size: 11px; font-weight: 700; color: var(--secondary); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; border-bottom: 1px solid var(--glass-border); padding-bottom: 5px; }
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+        .input-field { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); padding: 10px; color: white; border-radius: 8px; font-family: 'JetBrains Mono'; font-size: 12px; transition: 0.2s; }
+        .input-field:focus { outline: none; border-color: var(--secondary); background: rgba(0,0,0,0.5); }
+        .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .full-w { grid-column: span 2; }
+
+        .controls-wrapper { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-run { flex: 1; padding: 16px; background: linear-gradient(135deg, var(--secondary), var(--primary)); border: none; border-radius: 12px; color: white; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(14, 165, 233, 0.3); }
+        .btn-run:hover { opacity: 0.9; transform: scale(1.02); }
+        .btn-mic { width: 50px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; color: white; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; }
+        .btn-mic:hover { background: rgba(255,255,255,0.1); }
+        .mic-active { background: rgba(239, 68, 68, 0.2) !important; border-color: var(--danger) !important; color: var(--danger) !important; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: var(--primary-light); margin-top: -6px; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: var(--glass-border); border-radius: 2px; }
+
+        .header-dash { display: flex; justify-content: space-between; align-items: center; }
+        .header-dash h1 { font-size: 28px; font-weight: 800; margin: 0; background: linear-gradient(to right, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .clock-badge { background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 6px 18px; border-radius: 50px; font-family: 'JetBrains Mono'; color: var(--primary-light); font-weight: 700; font-size: 14px; backdrop-filter: blur(10px); }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .stat-card { background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 20px; border-radius: 16px; position: relative; overflow: hidden; backdrop-filter: blur(10px); transition: transform 0.3s; }
+        .stat-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
+        .stat-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-val { font-size: 24px; font-weight: 700; margin-top: 8px; font-family: 'JetBrains Mono'; }
+        .stat-icon { position: absolute; top: 18px; right: 18px; font-size: 24px; opacity: 0.2; }
+
+        .content-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; min-height: 400px; height: calc(100vh - 250px); }
+        .glass-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s; }
+        .panel-header-tab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-shrink: 0; }
+        .panel-title { font-weight: 700; font-size: 14px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        
+        .tabs { display: flex; gap: 5px; background: rgba(0,0,0,0.4); padding: 3px; border-radius: 8px; }
+        .tab-btn { background: transparent; border: none; color: var(--text-muted); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .tab-btn.active { background: var(--primary); color: white; }
+        .tab-content { display: none; flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .tab-content.active { display: flex; }
+        
+        .filter-bar { display: flex; gap: 8px; margin-bottom: 10px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+
+        select option { background-color: #1e293b; color: #ffffff; }
+
+        .data-table-container { flex: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; height: 100%; max-height: 300px; }
+        .data-table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px; }
+        .data-table th { text-align: left; padding: 12px 10px; background: var(--solid-header); position: sticky; top: 0; color: var(--text-muted); font-weight: 600; z-index: 5; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .data-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #cbd5e1; }
+        
+        .tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+        .tag-dem { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+        .tag-ord { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .tag-arr { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .tag-rev { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+
+        .conclusion-box { padding: 20px; background: rgba(99, 102, 241, 0.05); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2); font-size: 13px; color: #e0e7ff; margin-top: 5px; line-height: 1.6; }
+        .conc-highlight { color: var(--secondary); font-weight: 700; }
+
+        .chart-wrapper { flex: 1; width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 10px; scrollbar-width: thin; scrollbar-color: var(--primary) rgba(255,255,255,0.05); }
+        .chart-inner { height: 100%; min-height: 300px; position: relative; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+
+        /* === MOBILE OPTIMIZATION (V10 - RESIZED LOGIN) === */
+        .mobile-tabs { display: none; } 
+        
+        @media screen and (max-width: 768px) {
+            body { overflow: auto; }
+            
+            /* Navbar lebih compact */
+            .navbar { padding: 0 15px; height: 60px; position: sticky; top: 0; z-index: 50; background: rgba(15, 23, 42, 0.95); }
+            .nav-logo span { display: none; }
+            .nav-logo i { font-size: 20px !important; }
+
+            /* PERBAIKAN LOGIN DI HP (LEBIH KECIL & RAPI) */
+            .login-card {
+                width: 85% !important; /* Jangan full screen */
+                max-width: 320px;
+                padding: 30px 20px; /* Padding dikecilin dikit */
+                margin: auto; /* Tengah */
+                margin-top: -50px; /* Biar agak naik visualnya */
+            }
+            .login-card h2 { font-size: 18px !important; margin-bottom: 20px !important; }
+            .machung-logo { max-width: 100px; margin-bottom: 15px; }
+
+            /* Tabs Mobile */
+            .mobile-tabs { 
+                display: flex; gap: 10px; padding: 10px 15px; 
+                background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid var(--glass-border);
+                position: sticky; top: 60px; z-index: 40; backdrop-filter: blur(10px);
+            }
+            .mtab-btn { 
+                flex: 1; padding: 10px; border: 1px solid var(--glass-border); 
+                background: rgba(255,255,255,0.05); color: var(--text-muted); 
+                border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; transition: 0.2s;
+            }
+            .mtab-btn.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+
+            /* Konten Mobile */
+            .sidebar { display: none; width: 100%; border: none; padding: 20px; padding-bottom: 100px; background: transparent; }
+            .main-content { display: none; width: 100%; padding: 20px; background: transparent; }
+            
+            .sidebar.active-view, .main-content.active-view { display: flex; animation: fadeIn 0.3s ease-in-out; }
+
+            .header-dash h1 { font-size: 22px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .content-grid { grid-template-columns: 1fr; height: auto; display: flex; flex-direction: column; gap: 15px; }
+            .glass-panel { min-height: 300px; padding: 15px; }
+            .data-table-container { max-height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="snow-canvas"></canvas>
+    
+    <img src="https://media.tenor.com/On7kvX5QW4cAAAAi/santa-claus.gif" class="santa-claus" alt="Flying Santa">
+
+    <div id="login-screen">
+        <div class="login-card">
+            <img src="https://machung.ac.id/wp-content/themes/brew-master/images/images-ps/logo-umc.png" alt="Logo" class="machung-logo">
+            <div style="font-family:'JetBrains Mono'; color:var(--primary-light); font-size:11px; margin-bottom:5px; letter-spacing:2px;">TEKNIK INFORMATIKA</div>
+            <h2 style="margin:0 0 30px 0; font-size:22px; font-weight:800; letter-spacing:0.5px;">INVENTORY SIMULATOR</h2>
+            <input type="text" id="username-input" class="login-input" placeholder="Masukkan ID Pengguna..." autocomplete="off">
+            <button class="btn-enter" onclick="performLogin()">MASUK APLIKASI</button>
+        </div>
+        <div style="position: absolute; bottom: 20px; font-size: 11px; opacity: 0.6; color: white;">&copy; 2025 Universitas Ma Chung | System V.10.0 (Xmas Special)</div>
+    </div>
+
+    <div id="app-container">
+        <div class="navbar">
+            <div class="nav-logo"><i class="ph-bold ph-chart-polar" style="font-size:24px; color:var(--primary);"></i><span>INV. SIMULATION</span></div>
+            <div class="nav-user">
+                <div style="text-align:right;"><div style="font-weight:700; font-size:13px;" id="display-username">User</div><div style="font-size:10px; color:var(--success);" id="device-status">● Online</div></div>
+                <div class="avatar" id="user-avatar">U</div>
+            </div>
+        </div>
+
+        <div class="mobile-tabs">
+            <button class="mtab-btn active" onclick="switchMobileView('sidebar', this)"><i class="ph-bold ph-sliders"></i> PARAMETER</button>
+            <button class="mtab-btn" onclick="switchMobileView('main', this)"><i class="ph-bold ph-chart-line-up"></i> DASHBOARD</button>
+        </div>
+
+        <div class="content-wrapper">
+            <div class="sidebar active-view">
+                <div class="section-header"><i class="ph-bold ph-sliders-horizontal"></i> KONTROL PANEL</div>
+                
+                <div class="section-header" style="margin-top:10px;"><i class="ph-bold ph-chart-bar"></i> DISTRIBUSI</div>
+                <div class="input-group"><label>Interdemand Mean (Exp)</label><input type="number" id="in_inter_mean" class="input-field" value="0.19" step="0.01"></div>
+                <div class="input-group"><label>Demand Mean (Poisson)</label><input type="number" id="in_demand_mean" class="input-field" value="3.41" step="0.1"></div>
+                <div class="cost-grid">
+                    <div class="input-group"><label>Lag Min</label><input type="number" id="in_lag_min" class="input-field" value="0.4"></div>
+                    <div class="input-group"><label>Lag Max</label><input type="number" id="in_lag_max" class="input-field" value="1.0"></div>
+                </div>
+                
+                <div class="section-header"><i class="ph-bold ph-coins"></i> PARAMETER</div>
+                <div class="cost-grid">
+                    <div class="input-group full-w"><label>Initial Inventory</label><input type="number" id="in_stock" class="input-field" value="40"></div>
+                    <div class="input-group"><label>Setup (K)</label><input type="number" id="cost_K" class="input-field" value="80000"></div>
+                    <div class="input-group"><label>Increment (i)</label><input type="number" id="cost_i" class="input-field" value="500"></div>
+                    <div class="input-group"><label>Holding (h)</label><input type="number" id="cost_h" class="input-field" value="250"></div>
+                    <div class="input-group"><label>Shortage (g)</label><input type="number" id="cost_g" class="input-field" value="300"></div>
+                    <div class="input-group"><label>Target (S)</label><input type="number" id="in_S" class="input-field" value="50"></div>
+                    <div class="input-group"><label>Reorder (s)</label><input type="number" id="in_s" class="input-field" value="10"></div>
+                </div>
+
+                <div class="section-header"><i class="ph-bold ph-gear"></i> CONFIG</div>
+                <div class="cost-grid">
+                    <div class="input-group"><label>Durasi (Bulan)</label><input type="number" id="in_duration" class="input-field" value="12"></div>
+                    <div class="input-group"><label>RNG Seed</label><input type="number" id="in_seed" class="input-field" value="12345"></div>
+                </div>
+                
+                <div class="input-group" style="margin-top:10px;">
+                    <label style="display:flex; justify-content:space-between;"><span>Kecepatan Animasi</span><span style="color:var(--primary-light)">Cepat &larr; &rarr; Lambat</span></label>
+                    <input type="range" id="in_speed" min="10" max="500" value="40" step="10">
+                </div>
+                
+                <div class="controls-wrapper">
+                    <button class="btn-run" onclick="startSim()">JALANKAN SIMULASI</button>
+                    <button class="btn-mic" onclick="startVoiceCommand()" title="Voice Command"><i class="ph-bold ph-microphone" style="font-size:20px;" id="micIcon"></i></button>
+                </div>
+                <div id="voiceStatus" style="font-size:10px; color:var(--text-muted); text-align:center; margin-top:5px; min-height:15px;"></div>
+            </div>
+
+            <div class="main-content">
+                <div class="header-dash">
+                    <div><h1 id="welcome-header">Dashboard</h1><p style="color:var(--text-muted); font-size:13px;">Real-time Stochastic Inventory Analysis</p></div>
+                    <div class="clock-badge" id="clock">00:00</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card"><i class="ph-duotone ph-currency-dollar stat-icon"></i><div class="stat-label" style="color:var(--danger)">Total Cost</div><div class="stat-val" id="disp_cost">Rp 0</div></div>
+                    <div class="stat-card"><i class="ph-duotone ph-package stat-icon"></i><div class="stat-label" style="color:var(--primary-light)">Current Stock</div><div class="stat-val" id="disp_stock">0</div></div>
+                    <div class="stat-card"><i class="ph-duotone ph-shopping-cart stat-icon"></i><div class="stat-label" style="color:var(--secondary)">Total Demand</div><div class="stat-val" id="disp_demand">0</div></div>
+                    <div class="stat-card"><i class="ph-duotone ph-calendar stat-icon"></i><div class="stat-label" style="color:var(--warning)">Simulated Month</div><div class="stat-val" id="disp_time">0.00</div></div>
+                </div>
+
+                <div class="content-grid">
+                    <div class="glass-panel">
+                        <div class="panel-header-tab"><div class="panel-title"><i class="ph-bold ph-trend-up"></i> GRAFIK STOK</div></div>
+                        <div class="chart-wrapper"><div class="chart-inner"><canvas id="mainChart"></canvas></div></div>
+                    </div>
+                    
+                    <div class="glass-panel">
+                        <div class="panel-header-tab">
+                            <div class="panel-title"><i class="ph-bold ph-notebook"></i> PANEL LAPORAN</div>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div class="tabs">
+                                    <button class="tab-btn active" onclick="switchTab('events', event)">Live</button>
+                                    <button class="tab-btn" onclick="switchTab('report', event)">Report</button>
+                                    <button class="tab-btn" onclick="switchTab('conc', event)">Insight</button>
+                                </div>
+                                <button onclick="downloadExcel()" title="Export Excel" style="background:var(--success); border:none; padding:6px; border-radius:6px; color:white; cursor:pointer;"><i class="ph-bold ph-file-xls" style="font-size:14px;"></i></button>
+                            </div>
+                        </div>
+                        
+                        <div id="tab-events" class="tab-content active" style="display:flex;">
+                            <div class="filter-bar">
+                                <input type="text" id="searchHistory" onkeyup="filterHistory()" placeholder="Cari event..." class="input-field" style="border:none; background:transparent;">
+                                <select id="filterType" onchange="filterHistory()" class="input-field" style="width:100px; border:none; background:transparent; cursor:pointer;">
+                                    <option value="ALL">Semua</option><option value="DEMAND">Demand</option><option value="ORDER">Order</option><option value="ARRIVAL">Masuk</option>
+                                </select>
+                            </div>
+                            <div class="data-table-container"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Qty</th><th>Stok</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+                        </div>
+
+                        <div id="tab-report" class="tab-content" style="display:none;">
+                            <div class="data-table-container"><table class="data-table"><thead><tr><th>Bulan</th><th>Order</th><th>Hold</th><th>Short</th><th>Total</th></tr></thead><tbody id="reportBody"></tbody></table></div>
+                        </div>
+
+                        <div id="tab-conc" class="tab-content" style="display:none;">
+                            <div id="conclusionBody" class="conclusion-box"><div style="text-align:center; padding:30px; opacity:0.5;"><i class="ph-duotone ph-chart-line-up" style="font-size:32px;"></i><br>Jalankan simulasi untuk melihat analisis.</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === SALJU ANIMATION SCRIPT ===
+        (function() {
+            const canvas = document.getElementById('snow-canvas');
+            const ctx = canvas.getContext('2d');
+            let width = canvas.width = window.innerWidth;
+            let height = canvas.height = window.innerHeight;
+            let particles = [];
+            const particleCount = 100;
+
+            window.addEventListener('resize', function() {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+            });
+
+            class Particle {
+                constructor() { this.reset(); }
+                reset() {
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * -height;
+                    this.vx = Math.random() - 0.5;
+                    this.vy = Math.random() * 1 + 0.5;
+                    this.radius = Math.random() * 2 + 1;
+                    this.opacity = Math.random() * 0.5 + 0.3;
+                }
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    if (this.y > height) this.reset();
+                }
+                draw() {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function init() { for (let i = 0; i < particleCount; i++) particles.push(new Particle()); loop(); }
+            function loop() {
+                ctx.clearRect(0, 0, width, height);
+                particles.forEach(p => { p.update(); p.draw(); });
+                requestAnimationFrame(loop);
+            }
+            init();
+        })();
+
+        function checkDevice() {
+            const ua = navigator.userAgent; let os = "Unknown"; let icon = "ph-desktop";
+            if (/Windows/.test(ua)) { os = "Windows"; icon = "ph-monitor"; }
+            else if (/Android/.test(ua)) { os = "Android"; icon = "ph-device-mobile"; }
+            else if (/iPhone|iPad/.test(ua)) { os = "iOS"; icon = "ph-apple-logo"; }
+            document.getElementById('device-status').innerHTML = `<i class="ph-bold ${icon}"></i> ${os}`; return os;
+        }
+
+        // === FUNGSI LOGIN DENGAN TRANSISI HALUS ===
+        function performLogin() {
+            const user = document.getElementById('username-input').value;
+            if(!user) return alert("Mohon masukkan nama user!");
+            document.getElementById('display-username').innerText = user;
+            document.getElementById('welcome-header').innerText = "Welcome back, " + user;
+            document.getElementById('user-avatar').innerText = user.charAt(0).toUpperCase();
+            
+            // Animasi Keluar
+            const login = document.getElementById('login-screen');
+            login.classList.add('fade-out'); // Tambah class fade-out CSS
+            
+            // Animasi Masuk Dashboard
+            const app = document.getElementById('app-container');
+            
+            setTimeout(() => { 
+                login.style.display='none'; 
+                app.classList.add('dashboard-enter'); // Jalankan animasi slide-up
+            }, 800); // Tunggu durasi animasi selesai (0.8s)
+            
+            checkDevice();
+        }
+        
+        document.getElementById('username-input').addEventListener("keypress", (e)=>{if(e.key==="Enter")performLogin()});
+        setInterval(()=>document.getElementById('clock').innerText=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);
+        
+        function switchTab(id, e) {
+            document.querySelectorAll('.tab-content').forEach(el=>el.style.display='none');
+            document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+            document.getElementById('tab-'+id).style.display='flex'; if(e) e.target.classList.add('active');
+        }
+
+        function switchMobileView(view, btn) {
+            document.querySelectorAll('.mtab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+            const sidebar = document.querySelector('.sidebar'); const main = document.querySelector('.main-content');
+            if(view === 'sidebar') { sidebar.classList.add('active-view'); main.classList.remove('active-view'); } 
+            else { sidebar.classList.remove('active-view'); main.classList.add('active-view'); }
+        }
+
+        function filterHistory() {
+            const input = document.getElementById("searchHistory").value.toUpperCase();
+            const type = document.getElementById("filterType").value.toUpperCase();
+            const tr = document.getElementById("historyBody").getElementsByTagName("tr");
+            for (let i = 0; i < tr.length; i++) {
+                const tdEvent = tr[i].getElementsByTagName("td")[1];
+                if (tdEvent) {
+                    const txt = tdEvent.innerText; const row = tr[i].innerText;
+                    tr[i].style.display = (row.toUpperCase().indexOf(input)>-1 && (type==="ALL"||txt.toUpperCase().indexOf(type)>-1)) ? "" : "none";
+                }
+            }
+        }
+
+        let globalMonthlyData=[], globalEventData=[], globalInsight="";
+        function downloadExcel() {
+            if(globalMonthlyData.length===0) return alert("Jalankan simulasi dulu.");
+            const ws1=XLSX.utils.aoa_to_sheet([["Laporan Bulanan"],["Per","Ord","Hld","Sht","Tot"],...globalMonthlyData.map(d=>[`B${d.m}`,d.ord,d.hld,d.sht,d.tot]),[],["KESIMPULAN:"],[globalInsight.replace(/<[^>]*>?/gm,'')]]);
+            const ws2=XLSX.utils.aoa_to_sheet([["Logs"],["Time","Evt","Qty","Stk"],...globalEventData.map(e=>[e.t.toFixed(2),e.type,e.qty,e.inv])]);
+            const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws1,"Report"); XLSX.utils.book_append_sheet(wb,ws2,"Events"); XLSX.writeFile(wb,"Sim_Result.xlsx");
+        }
+
+        function startVoiceCommand() {
+            if (!('webkitSpeechRecognition' in window)) return alert("Gunakan Chrome/Edge.");
+            const r = new webkitSpeechRecognition(); r.lang='id-ID';
+            const s=document.getElementById('voiceStatus');
+            r.onstart=()=>{s.innerText="Katakan 'Mulai'..."; document.getElementById('micIcon').parentNode.classList.add('mic-active');};
+            r.onresult=(e)=>{ const c=e.results[0][0].transcript.toLowerCase(); s.innerText=c; if(c.includes("mulai"))startSim(); else if(c.includes("reset")){document.getElementById('historyBody').innerHTML="";chart.data.labels=[];chart.update();} };
+            r.onend=()=>{document.getElementById('micIcon').parentNode.classList.remove('mic-active'); setTimeout(()=>s.innerText="",3000);};
+            r.start();
+        }
+
+        class RNG { constructor(s){this.s=s;this.a=101;this.c=221;this.m=100000} next(){this.s=(this.a*this.s+this.c)%this.m;return this.s/this.m} }
+        function exp(r,m){let u=r.next();while(u===0)u=r.next();return -Math.log(u)*m}
+        function pois(r,l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=r.next()}while(p>L);return k-1}
+        function unif(r,a,b){return a+(b-a)*r.next()}
+
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label:'Stok', data:[], borderColor:'#818cf8', backgroundColor:'rgba(129,140,248,0.1)', borderWidth:2, tension:0, stepped:true, fill:true, pointBackgroundColor: [] }, { label:'Reorder Point', data:[], borderColor:'#ef4444', borderDash:[5,5], borderWidth:1, pointRadius:0 }] },
+            options: { responsive: false, maintainAspectRatio: false, animation: false, scales:{x:{grid:{color:'rgba(255,255,255,0.05)'}},y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}}}, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+        });
+
+        function generateConclusion(cost, stockouts, lost, demand, duration) {
+            const sl = demand > 0 ? ((demand - lost) / demand * 100).toFixed(1) : 100;
+            let status = "OPTIMAL", color = "#10b981";
+            let saran = "Sistem berjalan baik. Pertahankan parameter saat ini.";
+            let analisis = "Tingkat pelayanan sangat tinggi, menunjukkan keseimbangan stok yang baik.";
+
+            if(sl < 95) { 
+                status = "PERLU PERBAIKAN"; color = "#f59e0b"; 
+                analisis = "Terdapat beberapa kali kejadian stok kosong yang menyebabkan hilangnya potensi penjualan.";
+                saran = "Pertimbangkan menaikkan Reorder Point (s) sedikit agar pemesanan dilakukan lebih awal.";
+            }
+            if(sl < 85) { 
+                status = "KRITIS"; color = "#ef4444"; 
+                analisis = `Performa inventory sangat rendah. Anda kehilangan ${lost} unit penjualan (${(100-sl).toFixed(1)}% dari total permintaan). Ini sangat merugikan bisnis.`;
+                saran = "SEGERA naikkan Reorder Point (s) secara signifikan atau tambah Stok Awal! Risiko kehabisan barang sangat tinggi.";
+            }
+
+            globalInsight = `Status: ${status}. Biaya: ${cost}. Service: ${sl}%. Analisis: ${analisis}`;
+            
+            document.getElementById('conclusionBody').innerHTML = `
+                <div style="margin-bottom:15px; font-weight:800; color:${color}; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; font-size:14px;">STATUS KINERJA: ${status}</div>
+                <div style="margin-bottom:15px;"><strong>Analisis Sistem:</strong><br><span style="opacity:0.9;">${analisis}</span></div>
+                <div style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div><div style="font-size:10px; color:#94a3b8;">Total Biaya</div><div style="font-weight:700;">Rp ${cost.toLocaleString()}</div></div>
+                    <div><div style="font-size:10px; color:#94a3b8;">Service Level</div><div style="font-weight:700;">${sl}%</div></div>
+                    <div><div style="font-size:10px; color:#94a3b8;">Stockout</div><div style="font-weight:700; color:${stockouts>0?'#ef4444':'#10b981'}">${stockouts}x</div></div>
+                    <div><div style="font-size:10px; color:#94a3b8;">Lost Sales</div><div style="font-weight:700;">${lost} unit</div></div>
+                </div>
+                <div style="font-style:italic; font-weight:600; color:${color}; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px;"><i class="ph-bold ph-lightbulb"></i> Rekomendasi:<br>${saran}</div>
+            `;
+        }
+
+        let simInterval;
+        function startSim() {
+            if(window.innerWidth <= 768) { switchMobileView('main', document.querySelectorAll('.mtab-btn')[1]); }
+            clearInterval(simInterval);
+            const seed=parseInt(document.getElementById('in_seed').value), inter=parseFloat(document.getElementById('in_inter_mean').value), demMean=parseFloat(document.getElementById('in_demand_mean').value);
+            const lagMin=parseFloat(document.getElementById('in_lag_min').value), lagMax=parseFloat(document.getElementById('in_lag_max').value);
+            const init=parseInt(document.getElementById('in_stock').value), S=parseInt(document.getElementById('in_S').value), s=parseInt(document.getElementById('in_s').value);
+            const K=parseInt(document.getElementById('cost_K').value), cI=parseInt(document.getElementById('cost_i').value), cH=parseInt(document.getElementById('cost_h').value), cG=parseInt(document.getElementById('cost_g').value);
+            const duration = parseInt(document.getElementById('in_duration').value) || 12;
+            const speed = parseInt(document.getElementById('in_speed').value) || 40;
+
+            chart.data.labels=[]; chart.data.datasets[0].data=[]; chart.data.datasets[1].data=[]; chart.data.datasets[0].pointBackgroundColor=[];
+            document.getElementById('historyBody').innerHTML=""; document.getElementById('reportBody').innerHTML="";
+            document.getElementById('conclusionBody').innerHTML="<div style='text-align:center; padding:20px;'><i class='ph-duotone ph-spinner ph-spin'></i> Menghitung...</div>";
+            
+            globalMonthlyData = []; globalEventData = [];
+            document.querySelector('.chart-inner').style.width = (Math.max(1000, duration * 100)) + "px"; chart.resize();
+
+            const rI=new RNG(seed), rD=new RNG(seed+111), rL=new RNG(seed+999);
+            let evs=[], tD=0;
+            while(tD < duration) { let dt=exp(rI,inter); tD+=dt; if(tD > duration) break; let q=pois(rD,demMean); if(q>0)evs.push({t:tD, type:'DEMAND', qty:q}); }
+            for(let m=1;m<=duration;m++) evs.push({t:m, type:'REVIEW'});
+            evs.sort((a,b)=>a.t-b.t);
+
+            let steps=[{t:0, inv:init, c:0, d:0, type:'START', q:0}], line=[...evs];
+            let idx=0, t=0, inv=init, cost=0, dem=0, safe=0;
+            let costOrder=0, costHold=0, costShort=0;
+            let mData=[], curM=1, mOrdStart=0, mHldStart=0, mShtStart=0, stockouts=0, lostSales=0;
+
+            while(idx<line.length && safe < (duration * 300)) {
+                safe++; let ev=line[idx++]; if(ev.t > duration) break;
+                let dt=ev.t-t;
+                if(inv>0) costHold += (inv*cH*dt); else costShort += (Math.abs(inv)*cG*dt);
+
+                if(Math.floor(ev.t) >= curM) {
+                    let mOrd = costOrder - mOrdStart; let mHld = costHold - mHldStart; let mSht = costShort - mShtStart;
+                    mData.push({m:curM, ord:Math.floor(mOrd), hld:Math.floor(mHld), sht:Math.floor(mSht), tot:Math.floor(mOrd+mHld+mSht)});
+                    curM++; mOrdStart=costOrder; mHldStart=costHold; mShtStart=costShort;
+                }
+
+                t=ev.t; let typeH=ev.type, qH=ev.qty||0;
+                if(ev.type==='DEMAND') {
+                    dem+=ev.qty; if(inv < ev.qty) { stockouts++; lostSales+=(ev.qty - Math.max(0,inv)); } inv-=ev.qty;
+                } else if(ev.type==='REVIEW') {
+                    if(inv<=s) {
+                        let Q=S-inv, lag=unif(rL,lagMin,lagMax); costOrder+=K+(cI*Q);
+                        line.push({t:t+lag, type:'ARRIVAL', qty:Q}); line.sort((a,b)=>a.t-b.t);
+                        steps.push({t:t, inv:inv, c:(costOrder+costHold+costShort), d:dem, type:'ORDER', q:Q});
+                    } else typeH='REVIEW OK';
+                } else if(ev.type==='ARRIVAL') { inv+=ev.qty; }
+                steps.push({t:t, inv:inv, c:(costOrder+costHold+costShort), d:dem, type:typeH, q:qH});
+            }
+            while(curM <= duration){ mData.push({m:curM, ord:0, hld:0, sht:0, tot:0}); curM++; }
+            globalMonthlyData = mData;
+
+            const reportBody = document.getElementById('reportBody');
+            reportBody.innerHTML += `<tr><td>Bulan 0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>`;
+            mData.forEach(d => {
+                reportBody.innerHTML += `<tr><td>Bulan ${d.m}</td><td>${d.ord.toLocaleString()}</td><td>${d.hld.toLocaleString()}</td><td>${d.sht.toLocaleString()}</td><td style="font-weight:bold; color:var(--primary-light)">${d.tot.toLocaleString()}</td></tr>`;
+            });
+
+            let i=0; 
+            simInterval = setInterval(() => {
+                if(i>=steps.length) { 
+                    clearInterval(simInterval); 
+                    generateConclusion(Math.floor(costOrder+costHold+costShort), stockouts, lostSales, dem, duration);
+                    document.querySelector('.chart-wrapper').scrollLeft = document.querySelector('.chart-wrapper').scrollWidth;
+                    return; 
+                }
+                let st = steps[i];
+                document.getElementById('disp_cost').innerText="Rp "+Math.floor(st.c).toLocaleString();
+                document.getElementById('disp_stock').innerText=st.inv;
+                document.getElementById('disp_demand').innerText=st.d;
+                document.getElementById('disp_time').innerText=st.t.toFixed(2);
+
+                if(st.type!=='START' && st.type!=='REVIEW') {
+                    globalEventData.push({t:st.t, type:st.type, qty:st.q, inv:st.inv});
+                    let tagClass = 'tag-rev';
+                    if(st.type === 'DEMAND') tagClass = 'tag-dem'; if(st.type === 'ARRIVAL') tagClass = 'tag-arr'; if(st.type === 'ORDER') tagClass = 'tag-ord';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${st.t.toFixed(2)}</td><td><span class="tag ${tagClass}">${st.type}</span></td><td>${st.q}</td><td>${st.inv}</td>`;
+                    const tb = document.getElementById('historyBody');
+                    tb.insertBefore(tr, tb.firstChild);
+                    if (tb.children.length > 50) { tb.removeChild(tb.lastChild); }
+                    filterHistory();
+                }
+
+                chart.data.labels.push(st.t.toFixed(2));
+                chart.data.datasets[0].data.push(st.inv);
+                chart.data.datasets[1].data.push(s);
+                chart.data.datasets[0].pointBackgroundColor.push(st.inv<=0 ? '#ef4444' : '#818cf8');
+                chart.data.datasets[0].pointRadius = chart.data.datasets[0].data.map(val => val <= 0 ? 4 : 0);
+                chart.update('none');
+                const wrapper = document.querySelector('.chart-wrapper');
+                wrapper.scrollLeft = wrapper.scrollWidth;
+                i++;
+            }, speed);
+        }
+    </script>
+</body>
+</html>
